@@ -1,0 +1,27 @@
+K 26
+svn:wc:ra_dav:activity-url
+V 29
+/stkerr/EVoting/svn/!svn/act/
+K 25
+svn:wc:ra_dav:version-url
+V 35
+/stkerr/EVoting/svn/!svn/ver/78/svn
+END
+manifest.mf
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/stkerr/EVoting/svn/!svn/ver/14/svn/manifest.mf
+END
+build.xml
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/stkerr/EVoting/svn/!svn/ver/31/svn/build.xml
+END
+build-before-profiler.xml
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/stkerr/EVoting/svn/!svn/ver/31/svn/build-before-profiler.xml
+END

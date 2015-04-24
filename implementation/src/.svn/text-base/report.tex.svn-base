@@ -1,0 +1,605 @@
+\documentclass[12pt,letterpaper]{article}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\title{CS 555 Project - Electronic Voting}
+\author{Mohammed Almeshekah, Sam Kerr}
+\usepackage[margin=2.5cm]{geometry}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\setcounter{tocdepth}{2}
+\pagebreak
+
+%Introduction Section.
+\section{Introduction}
+Electronic voting is one of the most interesting application of modern cryptography. It integrates a wide selection of cryptographic tools into one coherent secure system that serves millions of users. We have decided to delve deep in implementing this project and examine how different parts of cryptography can build on each other to solve a real world problem.
+
+\section*{Scenario Description}
+The nature of the scenario allows us to make various assumptions and rules out certain options. As such, it is important to explicitly describe how we envision our system being used.
+
+Our system will consist of a central tabulating facility (CTF) and various different polling places throughout the country. Voters will go to a polling place to register and to vote, in a similar way
+to current elections.
+
+Voters will go to their polling place to register. Upon registering, they will be given a hardware voting token that contains some storage space. It is important to note that these tokens are all blank
+before they are used. Every token is identical before the election and the voter can delete it's contents if necessary as well. The voter then uses his token, goes to a polling place,
+and performs the registration process
+with the CTF. This involves sending his full name and social security number, so the CTF can record who has registered and who has not. The token then selects an ID number from a list of
+available IDs transparently to the voter. Note that this ID number does not correspond to an actual user. The voter then goes home until the voting period begins.
+
+When the voting period begins, the voter returns to his polling place with his voting token. He does not check in or identify himself in anyway to the staff, but rather, simply goes  to a voting booth,
+inserts his token, and completes his vote. The votes are stored under encryption, so it is not possible for the CTF to know the progress of the election until it is over.
+Each voter is also given a receipt, signed by the CTF, acknowledging the vote.
+Note that it is possible for a voter to vote more than once at this point, since the CTF will detect his ID colliding with another users ID number and issue
+him a new one. However, this will be detected and dealt with later. After the voter has voted, he goes home.
+
+During the voting period, if the voter decides he would like to change his vote, he returns to the polling place and changes his vote using his voting token. He can do this as often as he wants
+during the voting period. Also, since the CTF cannot decrypt the votes yet, a user wouldn't be able to find out how everyone else is voting and change his own vote based on that.
+
+After the voting period has ended, the CTF needs to collect decryption keys to tally the results. To do this, all users will return their voting tokens, which would still contain their ID numbers
+and decryption keys. This could be done either by mailing the tokens in or return them to the polling place. Note that since a user has only one identity token, even if he has send more than
+one vote, he cannot decrypt more than one vote, which means that a single user cannot vote multiple times. Once the CTF has received the voting tokens from all the users, it uses the stored
+decryption keys to decrypt the votes and tally the results. It can then publish who has won and lost the election.
+
+Note that a user might be concerned his vote was not counted by the CTF. We also address this in the following way. At the end of the voting period, the CTF will publish the votes
+and corresponding ID numbers for all voters to see. If a user sees that his vote is absent or miscounted, he can take the following steps.
+Before a user returns his voting token, he will print off the contents of his identity token, including a receipt given to him by the CTF during voting. He will then send this printoff
+to the CTF, which will prove that he had sent the following vote, since it was previously signed by the CTF.
+
+%System Description Section
+\section{System Description}
+The interaction between the CTF and the users will be implemented locally using socket programming. The users' details (RSA encryption keys, the identifier I, and voting and registration receipt) will be saved at the users' tokens.
+
+%System Assumptions
+\subsection{Assumptions}
+In our project, we made several different assumptions to either clarify the scenario or
+to ease the implementation. We describe those here.
+
+\subsubsection{Physical Facilities}
+We assume that the CTF is some large central facility with the computational and networking
+capabilities to handle many simultaneous clients.
+
+We also assume that clients will be connecting from a polling place, rather than from their homes.
+The polling place will be equipped with enough storage and computational power to maintain the
+list of available ID numbers, since it will be very large.
+
+\subsubsection{Network Security}
+For our scenario, we assume that there is a secure connection between the CTF and client.
+This could be implemented using either SSL or some other alternative. As such, we are not
+concerned with man in the middle attacks.
+
+Since we are assuming the connection is secured, we omit any implementation to
+secure the connection itself with signatures, MACs, et cetera. Any cryptography in our
+project is therefore to ensure privacy and security in the voting protocol itself.
+This assumption helps to simplify the implementation and reduces development
+time needed.
+
+\subsubsection{Communication Robustness}
+In addition to assuming the connection between the CTF and client is secure, we
+also assume that the communication channel is robust. That is, any messages between
+the client and CTF will be well formed and not have erroneous information sent. By
+making this assumption, we are able to omit much of the code needed to verify the
+quality of messages and ensure that they are of the proper format. Instead, the only
+checking needs to be done to verify the values sent in the message, but not the message
+itself.
+
+This simplifies the implementation and reduces development time. In a production
+environment, this assumption would need to be discarded, but it is acceptable in
+this situation.
+
+%The Overall Protocol
+\subsection{The Voting protocol}
+\begin{enumerate}
+\item \textbf{The CTF publishes a list of all eligible voters.}
+The CTF will receive the list of all eligible voters and store their details in its database. This list will contain the user's full name and their SSNs. Note that
+only the CTF will be able to view this list, since voter's should not be able look at other voter's SSNs.
+
+\item \textbf{Before a deadline, each voter tells the CTF whether she intends to vote.}
+Each voter will check whether she is an eligible voter by inquiring the CTF and providing her SSN.
+If so, the voter tells the CTF whether she wants to vote. In addition, the server will send a signature on the user's SSN and send it back to the user.
+This will be used later by the user to prove that she has
+registered to vote and that the CTF acknowledged it.
+This signature must be time stamped, too.
+
+\item \textbf{At this deadline, the CTF publishes a list of all eligible voters participating in this election.}
+The CTF publishes a list of all registered voters as a file listing the SSNs of the registered users.
+This list must be timestamped and signed by the CTF and stored at a safe location.
+In addition, the CTF creates a list of possible identifiers (\textit{Is}) and encrypt them under its Mental Poker encryption key and makes
+the list available to all voters.
+
+\item \textbf{Each voter receives a unique identification number I.}
+If a user is a registered voter, the voter's agent will receive the signed list of encrypted (\textit{Is}) and randomly select one of them on behalf of the user (lets call it $E_{K_{CTF}}(I_i))$. The
+voter generates a Mental Poker key pair. After that, the voter agent will encrypt as the following $E_{K_C}(E_{K_{CTF}}(I_i))$ and sent it back to the CTF. The CTF will decrypt it and send it back to the
+voter. The voter can then decrypt it using her keys and retrieve the identifier I.
+
+\item \textbf{Each voter send her encrypted vote anonymously to the CTF.}
+Each voter's agent will generate a public/private RSA key pair \textit{k, d}. If her vote is \textit{v}, she sends the message $I,E_k(I,v)$ to the CTF.
+
+\item \textbf{If the CTF detects a conflicts in identifiers sent along with the vote, it resolves that immediately.}
+This is resolved by the CTF where it will ask the voter to select another ID and send her vote again. The user's agent should detect that and re-obtain a new ID from the CTF, lets call it \textit{I`}. After that, the voter's agent will reconstruct the vote as $I`,E_k(I`,v)$ and send it to the CTF.
+
+\item \textbf{If there is not conflict in the identifiers, the CTF acknowledges receipt of the vote.}
+The CTF saves the pair $I,E_k(I,v)$ in the database and acknowledge that to the voter by sending a voting receipt. This receipt will be the CTF signature on the pair $I,E_k(I,v)$ that has been received from the voter. This can be used later by the voter to prove that she has voted and the CTF have successfully received her vote.
+
+\item \textbf{If a voter wants to change his vote from v to v', she sends I,$E_k(I,v')$ to the CTF.}
+The CTF then updates the stored votes with the new vote
+
+\item \textbf{After the deadline of the voting period, each voter sends the message I,d to the CTF.}
+This step is needed such that the CTF have the necessary information to decrypt the previously received votes and publish the results. In addition, the I's need to be sent with each decryption key to use the right key for the right vote.
+
+\item \textbf{The CTF decrypts the votes and publishes the results of the voting.}
+For each different vote, the list of all $E_k(I,v)$ values which contained that vote will be published.
+
+\item \textbf{If a voter sees that his vote is not properly counted, she protests.}
+The protest can be done by providing the voting receipt previously received from the CTF as an proof of a vote that has not been counted.
+\end{enumerate}
+
+%The Detailed Protocol
+\subsection{Detailed Protocol Steps}
+\begin{enumerate}
+\item \textbf{The CTF publishes a list of all eligible voters.}
+This is done by referencing the lists of available population, such as census, tax records, etc.
+
+\item \textbf{Before a deadline, each voter tells the CTF whether she intends to vote.}
+This is done by a voter mailing a slip in, coming to a polling place, or something similar.
+
+\item \textbf{At this deadline, the CTF publishes a list of all eligible voters participating in this election.}
+This is done by the CTF listing the SSNs of all users who have previously registered.
+
+\item \textbf{Each voter receives a unique identification number I.}
+This is done by each user coming to the polling place and acquiring a registration token. Then, each user
+executes the mental poker protocol to confidentially receive an ID number. This ID number, as well
+as the user's RSA and mental poker key pairs are stored on the identity token.
+
+Additionally, the CTF signs the SSN of the user, which confirms that he did in fact register previously.
+
+\item \textbf{Each voter send her encrypted vote anonymously to the CTF.}
+This is done by sending $I, E_C(I,V)$ to the CTF. The CTF will responsd by signing the vote and returning
+a receipt to the user. This can be used to show that the CTF did in fact receive the vote if it tries to deny
+it later.
+
+\item \textbf{If the CTF detects a conflicts in identifiers sent along with the vote, it resolves that immediately.}
+The CTF will respond to the client to inform him of a conflict and assign him a new ID number for a special
+pool that the CTF previously had generated. The user notes this new ID number and uses it for all future communications.
+
+\item \textbf{If there is not conflict in the identifiers, the CTF acknowledges receipt of the vote.}
+The CTF will responsd by signing the vote and returning
+a receipt to the user. This can be used to show that the CTF did in fact receive the vote if it tries to deny
+it later.
+
+\item \textbf{If a voter wants to change his vote from v to v', she sends I,E\_k(I,v'),d to the CTF.}
+The CTF will update the database with the corresponding new vote. This could be a potential vulnerability,
+which we address later in the security analysis.
+
+\item \textbf{After the deadline of the voting period, each voter sends the message I,d to the CTF.}
+Send the decryption keys is necessary for the CTF to tally the votes. For our scenario, each user physically
+returns, either by mailing to the CTF or in person at the polling place, his voting token. As such, he can only
+decrypt one vote.
+
+\item \textbf{The CTF decrypts the votes and publishes the results of the voting.}
+This shows who the winner of the election is. It also shows which ID numbers voted for whom.
+
+\item \textbf{If a voter sees that his vote is not properly counted, she protests.}
+Since the user will have a receipt of the vote she sent in, it will be possible for her to
+prove that the CTF miscounted her vote.
+
+
+\end{enumerate}
+
+%The detailed protocol Specs.
+\subsection{The Networking Specification}
+\begin{itemize}
+\subsubsection{The Lexical Blocks}
+\item QUESTION := "?"
+\item AMP := "\&"
+\item ID := "ID="
+\item EXPONENT := "EXPONENT="
+\item MODULUS := "MODULUS="
+\item NAME := "NAME="
+\item SSN := "SSN="
+\item RCPT :="RECEIPT="
+\item CIPHERTEXT := "CIPHERTEXT="
+\item IV := "IV="
+\item SYMKEY := "SYMKEY="
+\item CIPHERBLOCK := CIPHERTEXT NUMBER AMP SYMKEY NUMBER AMP IV NUMBER
+\item STRING := STRING [a-zA-Z0-9]
+\item NUMBER := NUMBER [0-9]
+\item MESSAGE := "ACCEPT:" STRING $\|$ "FAIL:" STRING
+\item STATUSBLOCK := "STATUS={" MESSAGE "}"
+\subsubsection{Voter to CTF Messages}
+\item Reveal := "REVEALVOTE" QUESTION ID NUMBER AMP EXPONENT NUMBER AMP MODULUS NUMBER
+\item IdEnroll :="IDENROLL" QUESTION ID NUMBER
+\item CheckValid := "CHECKVALID" QUESTION NAME STRING AMP SSN STRING
+\item RegisterReq := "REGISTERREQ" QUESTION NAME STRING AMP SSN STRING
+\item Submit := "SUBMITVOTE" QUESTION ID NUMBER AMP CIPHERBLOCK
+\item Protest := "PROTEST" QUESTION ID NUMBER AMP EXPONENT NUMBER AMP MODULUS NUMBER AMP CIPHERBLOCK
+\item ChangeReq := "CHANGEREQ" QUESTION ID NUMBER AMP CIPHERBLOCK
+\subsubsection{CTF to Voter Messages}
+\item ProtestResponse := "PROTESTRESPONSE" QUESTION STATUSBLOCK
+\item CheckResponse := "CHECKRESPONSE" QUESTION STATUSBLOCK
+\item RegResponse := "REGRESPONSE" QUESTION STATUSBLOCK AMP RCPT
+\item RevealResponse := "REVEALRESPONSE" QUESTION STATUSBLOCK
+\item IdResponse := "IDRESPONSE" QUESTION STATUSBLOCK AMP ID NUMBER
+\item SubmitResponse :="SUBMITRESPONSE" QUESTION STATUSBLOCK AMP RCPT NUMBER $\|$ "SUBMITRESPONSE" QUESTION STATUSBLOCK AMP ID NUMBER
+\item ChangeResponse := "CHANGERESPONSE" QUESTION STATUSBLOCK AMP RCPT NUMBER
+\end{itemize}
+
+
+%The Security Analysis of The System
+\section{Security Analysis of the Protocol}
+Our protocol is based on the protocol specified in ~\cite{Ballot} and ~\cite{Bruse} which generally consists of three major phases; namely the preliminary phase, the voting phase and the results phase. In this section we will analyze the security of these three phases pointing out to what security mechanisms we have used.
+
+\subsection{The Preliminary Phase}
+In this phase the CTF publishes the list of all eligible voters and store them in the database. In addition, the CTF will create two lists of voting IDs; one of these list available for users to choose from, and the other one will be saved internally at the CTF side to resolve the potential conflict in the users IDs. The public list will save the IDs in an encrypted form under the CTF's Pohlig-Hellman encryption key (which has a modulus length of 4096-bit).
+
+When an eligible user wants to register for voting she will send a command to the CTF asking for registration where she will receive a receipt from the CTF proving that she has successfully registered to vote and the file of the encrypted IDs to choose from. This receipt will be a CTF signature on the voter's SSN plus a time-stamp. After that, the voter has to randomly select and ID from the list and encrypt it under his Pohlig-Hellman encryption key and send that double encrypted ID to the CTF to decrypt it under its Pohlig-Hellman decryption key and send it back to the voter where it will be now only encrypted under the voter's Pohlig-Hellman encryption key. Finally, the voter can decrypt that ID and then she will be ready to vote when the voting phase start.
+
+At the end of this phase the CTF will publish a signed time-stamped file of the list of registered voters that can be save at an external place. In addition, all the communications between the CTF and the voters can be save on an append-only log file.
+
+The main purpose of having this preliminary phase is to limit the CTF ability to add fraudulent votes during the voting period ~\cite{Bruse}. However, this does not prevent the CTF from adding a fraudulent votes for voters whom registered to vote but then they did not vote during the voting period. In addition, in this phase each voter will receive a receipt that prove that she has registered at a given point of time which can be used to limit the ability of the CTF denying some legitimately registered voters from voting during the voting period.
+
+In this stage we are the Pohlig-Hellman encryption algorithm to encrypt/decrypt the IDs where we exchange these IDs using the Mental Poker protocol. We utilize the commutative feature of the Pohlig-Hellman protocol to decrypt the double encrypted ID by applying the CTF decryption process in any order. By doing that we preserve the anonymity feature of in our protocol where the CTF will not be able to link the voter's identity with her ID despite that it can link the ID decryption process with the registration process as this linkage is needed to prevent a user from obtaining an ID without registering or obtaining and ID twice. This de-linking is achieved because when the CTF decrypts the double encrypted ID it will have the ID encrypt under the voter's key and the CTF will not be able to decrypt it in a way better than brute-forcing the voter's keys which is computationally infeasible.
+
+%Say something about the ID selection.
+
+\subsection{The Voting Phase}
+This is the main stage of the voting protocol where voters will submit the encryption version of their votes to the CTF. In addition, during this phase voters can request to change their vote to a new one and provide the encryption form of the new vote.
+
+When a voter wants to vote she will send her ID and the encryption of the ID concatenated into the vote to the CTF. The CTF will check that and ID is valid, if so the encrypted vote will be added to the database along with the corresponding ID. If the vote has been added successfully to the database the CTF will generate and sign receipt as a proof of voting to the voter.
+
+Each voter will have an RSA key pair which will be used to encrypt the payload of the vote (ID concatenated into the vote) using hybrid encryption. That is, the RSA encryption key will be used to encrypt a randomly generated symmetric key, and then this key will be used to encrypt the payload using AES in CTR mode where the IV will be randomly generated for each different encryption. After that, the voter will triple of the RSA encrypted symmetric key, the AES encrypted content and the IV as a whole cipher block to the CTF.
+
+At the CTF side, it will check that the ID is valid and store this whole cipher block in the database. After that, it will generate a signature on the voter ID concatenated into her cipher block and send that signature to the voter.
+
+It worth noting that there is a probability that two IDs will collude, which means that there are two voters who selected the same ID from the CTF list of valid IDs, and when that happens that will be resolved at the CTF side in the following way. We have mentioned earlier that the CTF has another list of ID that are not offered to the voters and it is kept at the CTF side to resolve collision. When a voter submit her vote the CTF first check if there is a collision and if so the CTF will select an ID from the secondary list and send back the voter asking her to resend her encrypted vote by including this new ID. On the voter side, she will detect that and redo the submission process using this new ID provided by the CTF. It worth noting that this will also not link the vote to the voter's ID because the collided ID is also anonymous and we only can link the new ID to the collided one.
+
+If the voter want to change her vote, it will perform the exact same process of submitting vote and send the ID and the cipher block to the CTF. However, the CTF will update the database with the voter's new vote deleting the previously stored vote and will generate a new signature on the new vote.
+
+\subsection{The Results Phase}
+
+After the voting process ends, each voter will send her ID and her RSA private key to the CTF where the votes can be decrypted. At the CTF side, it whenever it receives a new pair it will extract the cipher block from the database, decrypt the vote and store the decryption key and the vote to the database. When all the votes has been decrypted the CTF will publish a file that contains the following triple for each ID: the vote, the encrypted vote and the decryption key.
+
+%Implementation Section
+\section{Implementation}
+For language, we are using Java. There was some concern that using Java and the built in BigInteger classes would not be sufficiently
+fast, as compared to another solution such as GMP, but this did not appear to be a major problem.
+More details are in the timing section of the paper.
+
+We did not want to invest a lot of time reimplemnting many common algorithms such as RSA, AES, etc. As such, we used a library called
+BouncyCastle, which contained implementations of these algorithms. There is more information about this library at
+www.bouncycastle.org. A particuarly interesting feature about this library is that various parts of it are FIPS certified,
+meaning that the implementations have been verified to be correct. We used the BouncyCastle library to implement wrappers to help
+make our coding easier.
+
+For the storage layer, we used the MySQL database. It is straightforward to use and high quality tools are readily available, so this was
+a good choice. We did not run into any major problems with it either.
+
+We implemented our networking layer using Java Sockets and ServerSockets. For the CTF, the networking layer would spin off a new thread as each
+client connected and would handle it seperately from all other threads. Clients would run one thread to connect to and manage communication
+with the CTF. Additionally, our networking layer provided a blocking send()/receive() abstration to ease programming.
+
+The GUIs were made using Java Swing. Swing is fairly simple to use and is a native solution for Java, so it was an easy choice.
+
+We also used the Apache Common Lang library as helper functions at varius stages in our project.
+
+%Cryptographic Classes
+\subsection{Cryptographic Classes}
+
+To use cryptography, wrote two classes, one an RSA helper class and one a mental poker wrapper class.
+It was much easier writing a wrapper around the BouncyCastle code, rather than duplicating the complex
+ways of calling BouncyCastle.
+
+The RSA class encapsulated functionality such as key pair generation, encryption, decryption, signing, and signature verification.
+
+The mental poker wrapper encapsulated a simple encrypt()/decrypt() functionality. Note that since mental poker operations
+commute, encrypt/decrypt could be used in either order.
+
+%Communication Classes
+\subsection{Communication Class}
+The networking layer provides a communication interface between the CTF and client. Two classes are provided, one for
+clients that connects to a server and communicates with it and one for the CTF that listens on a given port, accepts clients,
+and spins them off into their own thread.
+
+Both classes provide a send()/receive() abstraction. Receive() is blocking in both cases and will not return until a message
+has been received. The send() method for client's simply takes a String and sends it to the CTF it connected to. The send()
+method for the CTF takes a String as well as an int that represents a specific client. It then sends the message to the designated
+client. Note that send() is not blocking in both cases.
+
+\subsection{The Database Class}
+This class provide the details of the database class that will be used at the CTF side.
+
+
+%CTF Class
+\subsection{The CTF}
+
+%CTF Local Data
+\subsubsection{CTF Local Data}
+
+%CTF Functions
+\subsubsection{CTF Processes}
+This class will give the CTF a simple graphical interface which provide the following functionalities:
+
+In this section we will describe all the local methods that is used internally by the CTF to manage the voting protocol. It worth noting that all these methods will called automatically after receiving the appropriate input.
+
+
+%User Class
+\subsection{The Voter}
+
+%User Local Data
+\subsubsection{Voter's Local Data}
+The CTF will have the following data stored securely at its side:
+
+%User Methods
+\subsubsection{Voter Processes}
+This class will give the user a simple graphical interface which provide the following functionalities:
+
+
+\section{Performance Analysis}
+In the appendix, please find pictures of the profiling data for both CTF and client.
+
+\subsection{Client Analysis}
+For our client profiling, we had a client connect to the CTF, register, vote, change his vote,
+reveal his vote, protest his vote, and then disconnect.
+
+Our results showed that generating an RSA keypair took 2189 ms and a mental poker keypair
+took 35.4 ms. Encryption took 1316 ms and 20.2 ms with RSA and mental poker,
+respectively. Decryption took 353 ms with mental poker. Key generation is somewhat slow,
+but due to the nature of the GUI, key generation is being done in the background
+and will finish before a user needs to perform a task.
+
+The networking code accounted for the majority of the client's functioning. It uses a similar
+networking stack as the CTF, which means that it has two seperate threads to handle network
+sending and receiving. As can be seen from our results, the listening task accounted for
+43.7\% our total run time. In the future, we could work on having this system wait more
+effeciently, but busy waiting did not cause any slow down in our program, so we are
+comfortable with the client performance.
+
+\subsection{CTF Analysis}
+The CTF is a multi-threaded applciation. That is, for every client that connects to it, new threads are created. A large part of its job is to do the
+network communication, in addition to the cryptographic lifting. We ran a test of the CTF with 1 client connected who registered, voted, and revealed his
+vote. The results of our test showed that the majority of the CTFs time was spent in busy waiting for messages from the client.
+
+Generating a keypair took approximately 3 seconds, while decrypting the client messages took approximately 686 ms with RSA and 409 ms with Mental Poker,
+respectively. These are all fairly fast operations, and we feel comfortable with their runtime.
+
+
+\section{Testing}
+%Part of the project is to test all parts of your program.  Did you
+%exhibit your test data and the results of the testing? Did you
+%explain why the test results really show that all of your program
+%works?  Look in a book on Software Engineering for hints on how to do this.
+Note that in some cases, we omit long strings of numbers, such as receipts and signatures from test cases in the
+interest of brevity and readability.
+
+\subsection{Networking Interface}
+The networking code uses a Java Socket and ServerSocket at its core. As such, it is using a TCP link. To test this
+link, we can monitor the traffic from the application using a program such as WireShark to monitor
+the messages being sent to and from the client application.
+
+The client program executes network transactions when certain buttons in the GUI are pressed. The table
+below lists the task, expected output, and actual output from our program, as well as a conclusion of
+whether the expected and actual output match.
+
+\begin{tabular}{ | p{16cm}|}
+\hline
+
+\hline
+
+{\bf Network Test \#1} \\
+Connect to the server and receive a session ID. \\
+{\bf Expected:} \\
+Upon connecting to the server, the client should receive the following set of messages. \\
+0:CONNECTED\\
+\{ID\#\}:CONFIG\\
+{\bf Actual:}  \\
+The client received this set of messages once he connected to the CTF \\
+0:CONNECTED \\
+552685592:CONFIG\\
+Test Passed.\\
+\hline
+
+{\bf Network Test \#2} \\
+Send a basic message from client to server. \\
+{\bf Expected:} \\
+\{ID\#\}:HELLO WORLD \\
+{\bf Actual:} \\
+947533209:HELLOWORLD \\
+Test Passed.\\
+\hline
+
+\hline
+{\bf Network Test \#3} \\
+Send a basic message from server to client.  Note that this was done
+by echoing back the previous message sent from the client.\\
+{\bf Expected:} \\
+\{ID\#\}:HELLO WORLD \\
+{\bf Actual:} \\
+947533209:HELLO WORLD \\
+Test Passed.\\
+\hline
+
+{\bf Network Test \#4} \\
+Send two messages from client to server. The response from the server should
+use the same session ID number each time. Note that the server is sent to simply
+echo back what it receives to the client for this test, which is how we monitor
+which session ID is being used.
+{\bf Expected:} \\
+\{ID\#\}:HELLO WORLD \\
+\{ID\#\}:HELLO WORLD \\
+{\bf Actual:} \\
+652695574:HELLO WORLD \\
+652695574:HELLO WORLD \\
+Test Passed.\\
+\hline
+
+{\bf Network Test \#5} \\
+Connect two clients to the same server and send either "1234" or "4567"
+to the server. The server is configured to echo back the messages, along
+with the session ID number. Each client should receive back his session ID number
+as well as the message he originally sent to the server. This test is designed to
+test simultaneous connections to the CTF.
+{\bf Expected:} \\
+\{$ID_1$\#\}:1234\\
+\{$ID_2$\#\}:4567\\
+{\bf Actual:} \\
+1419656789:1234\\
+-1223864479:4567\\
+Test Passed.\\
+\hline
+
+\hline
+
+
+\end{tabular}
+
+The previous tests illustrate that at a basic level, our network layer connects a client and server
+so they can communicate with each
+other . As such, we feel confident in our network implementation.
+
+\subsection{Client Testing}
+Client testing is considerably easier than testing the CTF. If the client can successfully generate
+network messages for the various parts of the protocol, we can be sure that it is properly
+functioning, since it does not interact with a database or other components.
+
+
+We present test cases for the registration stage, the voting stage,
+and the vote revealing stage. These can all three be tested independently.
+
+
+
+
+\subsubsection*{Registration Stage}
+This stage involves testing the registration protocol. At this point, we are comfortable with our networking layer,
+so we will monitor the traffic between client and server to ensure that registration is proceeding as expected.
+
+\begin{tabular}{ | p{16cm}|}
+
+\hline
+{\bf Registration Test \#1} \\
+Registration request for valid user "John Smith" and "123456789".  A REGISTERREQ message
+should be generated and sent. \\
+{\bf Expected: }\\
+{ID\#}:REGISTERREQ?NAME=John Smith\&SSN=123456789 \\
+{\bf Actual:}\\
+651287367:REGISTERREQ?NAME=John Smith\&SSN=123456789\\
+Test Passed.\\
+\hline
+
+\hline
+{\bf Registration Test \#2} \\
+Registration request for valid user "John Smith" and "123456789".  A REGISTERREQ message
+should be generated and sent. The client should then received a REGRESPONSE message,
+handle it properly, reset the session, and then execute the IDENROLL stage.\\
+{\bf Expected: }\\
+ID\#:REGISTERREQ?NAME=John Smith\&SSN=123456789 \\
+ID\#:REGRESPONSE?STATUS={ACCEPT:Congratulations, you have been registered.}\&RECEIPT=...\\
+ID\#:IDENROLL?ID=...\\\
+ID\#:IDRESPONSE?STATUS={ACCEPT:The ID is decrypted and attached}\&ID=...\\
+Using ID number:...\\
+Connected to:...\\
+This connection is:...\\
+0:CONNECTED\\
+ID$\#_2$:CONFIG\\
+{\bf Actual:}\\
+1369725753:REGISTERREQ?NAME=John Smith\&SSN=123456789\\
+1369725753:REGRESPONSE?STATUS={ACCEPT:Congratulations, you have been registered.}\&RECEIPT=...\\
+1369725753:IDENROLL?ID=...\\
+1369725753:IDRESPONSE?STATUS={ACCEPT:The ID is decrypted and attached}\&ID=...\\
+Using ID number:...\\
+Connected to: /127.0.0.1:4444,49507\\
+This connection is: /127.0.0.1:49507\\
+Server: 0:CONNECTED\\
+Server: -1267839115:CONFIG\\
+Test Passed.\\
+\hline
+
+\end{tabular}
+
+
+
+\subsubsection{Voting Stage}
+
+
+\subsubsection{Vote Revealing Stage}
+
+\subsection{CTF Testing}
+Testing the CTF is a little more involved than testing the client. Whereas the client is functionig properly if it
+correctly sends out various network requests, the CTF must verify users against its databases, who has connected
+before, et cetera. As such, our CTF testing is more lengthy.
+
+\subsubsection{Registration Stage}
+\begin{tabular}{ | p{16cm}|}
+\hline
+{\bf Registration Test \#1} \\
+Registration request for valid user "John Smith" and "123456789".  The CTF should
+respond and acknowledge the registration. \\
+{\bf Expected: }\\
+{ID\#}:REGRESPONSE?STATUS={ACCEPT:Congratulations, you have been registered.}\&RECEIPT=... \\
+{\bf Actual:}\\
+5027100:REGRESPONSE?STATUS={ACCEPT:Congratulations, you have been registered.}\&RECEIPT=... \\
+Test Passed.\\
+\hline
+
+\hline
+{\bf Registration Test \#2} \\
+Registration request for "Bilbo Baggins" and "123123123".  The CTF should
+respond, but not acknowledge the registration, since this is not a valid user. \\
+{\bf Expected:}\\
+{ID\#}:REGRESPONSE?STATUS={FAIL:status}\&RECEIPT=0\\
+{\bf Actual: }\\
+5027100:REGRESPONSE?STATUS={FAIL:Sorry, but you are not eligible to register.}\&RECEIPT=0 \\
+Test Passed.\\
+\hline
+
+\hline
+{\bf Registration Test \#3} \\
+Register "John Smith" with SSN "123456789", which is a valid registration. The CTF should
+respond with a receipt and the client should automatically obtain an ID number by executing
+the IDENROLL command. \\
+{\bf Expected:}\\
+{ID\#}:REGRESPONSE?STATUS={ACCEPT:Congratulations, you have been registered.}\&RECEIPT=... \\
+{ID\#}:IDRESPONSE?STATUS={ACCEPT:The ID is decrypted and attached}\&ID=..\\
+{\bf Actual:}\\
+5027100:REGRESPONSE?STATUS={ACCEPT:Congratulations, you have been registered.}\&RECEIPT=... \\
+5027100:IDRESPONSE?STATUS={ACCEPT:The ID is decrypted and attached}\&ID=...\\
+Test Passed.\\
+\hline
+
+\hline
+{\bf Registration Test \#4} \\
+Register "John Smith" with SSN "123456789", which is a valid registration, after he has already registered
+once. The CTF should respond that this is not a valid registration. \\
+{\bf Expected:}\\
+{ID\#}:REGRESPONSE?STATUS={FAIL:Sorry, but you are not eligible to register.}\&RECEIPT=0
+{\bf Actual:}\\
+651287367:REGRESPONSE?STATUS={FAIL:Sorry, but you are not eligible to register.}\&RECEIPT=0
+Test Passed.\\
+\hline
+\end{tabular}
+
+Our test cases show that our registration level is valid in the case of valid users registering initially,
+valid users re-registering, and invalid users registering. We are confident in our registration stage implementation.
+
+\subsubsection{Voting Stage}
+\subsubsection{Vote Revealing Stage}
+
+\section{Conclusion}
+
+\pagebreak
+\section{Appendices}
+Any Code or explanation of some methods. e.g. the one in Bouncy Castle.
+
+\subsection{Profiling Images}
+{\bf CTF Profiling} \\
+\includegraphics[width=150mm]{ctf_hotspot_profile.png}
+
+{\bf Client Profiling} \\
+\includegraphics[width=150mm]{client_hotspot_profile.png}
+
+\bibliographystyle{ieeetr}
+\bibliography{report}
+
+\end{document}
